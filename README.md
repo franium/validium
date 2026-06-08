@@ -20,7 +20,6 @@ A CLI tool that validates `.env` files against a typed schema. It catches missin
 - [Installation](#installation)
 - [Commands](#commands)
 - [Workflow](#workflow)
-- [CI Integration](#ci-integration)
 - [Sharing secrets safely](#sharing-secrets-safely)
 - [Schema: `validium.json`](#schema-validiumjson)
 - [Fallback: `.env.example`](#fallback-envexample)
@@ -101,27 +100,6 @@ Keep `.env.example` always in sync with a pre-commit hook:
 ```bash
 validium generate && git add .env.example
 ```
-
-## CI Integration
-
-Add `validium check` to your pipeline to validate environment variables before deployment:
-
-```yaml
-# .github/workflows/ci.yml
-- name: Validate .env
-  run: |
-    go install github.com/franium/validium/cmd/validium@latest
-    validium check
-```
-
-`check` exits with code `1` on any validation failure, making it safe to use as a pipeline gate.
-
-### Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| `0`  | All variables are valid |
-| `1`  | One or more validation errors |
 
 ## Sharing secrets safely
 

@@ -34,6 +34,7 @@ validium closes that gap with a typed schema (`validium.json`):
 - **Real validation, not just presence checks** — types, ranges, choices, and format rules (`url`, `email`, integer/float ranges, string enums, ...) catch bad values before your app boots or your CI pipeline deploys.
 - **Schemas grow with your project** — they're not write-once. Whenever you introduce a new variable, run `validium add VARIABLE_NAME` and walk through its type, required/secret flags, and constraints interactively; validium writes it straight into `validium.json` for you, no hand-editing JSON or regenerating from scratch.
 - **One source of truth** — generate `.env.example` directly from the schema with `validium generate`, so your example file and your validation rules never drift apart.
+- **A versioned contract for your environment** — `validium.json` holds no secrets, only types, descriptions, and constraints. Commit it like any other source file: your team reviews changes to your environment's contract in pull requests and tracks its evolution through git history, the same way you track code.
 - **Safer sharing** — encrypt `.env` for teammates with built-in `age` encryption (`keygen`/`encrypt`/`decrypt`), no external binary required.
 
 ## Quick Start

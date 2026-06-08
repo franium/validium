@@ -54,19 +54,15 @@ That's it. Keep reading to learn how to refine your schema, generate `.env.examp
 
 ## Installation
 
-```bash
-go install github.com/franium/validium/cmd/validium@latest
-```
-
-Or build from source:
+Already ran the one-liner from [Quick Start](#quick-start)? You're set. To build from source instead:
 
 ```bash
 git clone https://github.com/franium/validium
 cd validium
 go build -o validium ./cmd/validium
-```
 
 **Requirements:** Go 1.26+
+
 ## Commands
 
 | Command    | Description |
@@ -258,6 +254,15 @@ Run `validium init` to graduate from `.env.example` to a full typed schema.
 ## Development
 
 ### Regenerating the demo GIF
+
+```markdown
+## Development
+
+### Running tests and checks
+
+```bash
+go vet ./...
+go test ./...
 
 The demo (`assets/demo.gif`) is generated from `demo.tape` with [VHS](https://github.com/charmbracelet/vhs). VHS requires `ffmpeg` and `ttyd` to render:
 

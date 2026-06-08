@@ -60,6 +60,7 @@ Already ran the one-liner from [Quick Start](#quick-start)? You're set. To build
 git clone https://github.com/franium/validium
 cd validium
 go build -o validium ./cmd/validium
+```
 
 **Requirements:** Go 1.26+
 
@@ -253,16 +254,16 @@ Run `validium init` to graduate from `.env.example` to a full typed schema.
 
 ## Development
 
-### Regenerating the demo GIF
-
-```markdown
-## Development
-
 ### Running tests and checks
 
 ```bash
 go vet ./...
 go test ./...
+```
+
+These are the same checks CI runs on every push.
+
+### Regenerating the demo GIF
 
 The demo (`assets/demo.gif`) is generated from `demo.tape` with [VHS](https://github.com/charmbracelet/vhs). VHS requires `ffmpeg` and `ttyd` to render:
 

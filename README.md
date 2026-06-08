@@ -13,9 +13,29 @@ A CLI tool that validates `.env` files against a typed schema. It catches missin
 
 ![validium demo](assets/demo.gif)
 
+## Table of Contents
+
+- [Why validium?](#why-validium)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Commands](#commands)
+- [Workflow](#workflow)
+- [CI Integration](#ci-integration)
+- [Sharing secrets safely](#sharing-secrets-safely)
+- [Schema: `validium.json`](#schema-validiumjson)
+- [Fallback: `.env.example`](#fallback-envexample)
+- [Development](#development)
+
 ## Why validium?
 
-`.env.example` tells you which keys should exist. validium tells you whether the values are actually valid — right type, right format, not accidentally empty — before your app boots or your CI pipeline deploys.
+`.env.example` only tells you which keys should exist — not whether the values in `.env` actually make sense. A `PORT` set to `abc`, a `DATABASE_URL` that isn't a URL, or a required `API_KEY` left empty all pass a plain existence check and still blow up at runtime.
+
+validium closes that gap with a typed schema (`validium.json`):
+
+- **Real validation, not just presence checks** — types, ranges, choices, and format rules (`url`, `email`, integer/float ranges, string enums, ...) catch bad values before your app boots or your CI pipeline deploys.
+- **Schemas grow with your project** — they're not write-once. Whenever you introduce a new variable, run `validium add VARIABLE_NAME` and walk through its type, required/secret flags, and constraints interactively; validium writes it straight into `validium.json` for you, no hand-editing JSON or regenerating from scratch.
+- **One source of truth** — generate `.env.example` directly from the schema with `validium generate`, so your example file and your validation rules never drift apart.
+- **Safer sharing** — encrypt `.env` for teammates with built-in `age` encryption (`keygen`/`encrypt`/`decrypt`), no external binary required.
 
 ## Quick Start
 
@@ -73,6 +93,10 @@ validium generate
 
 # 4. Validate .env in CI or on pre-commit
 validium check
+
+# 5. Need a new variable later? Register it interactively —
+#    validium walks you through its type, required/secret flags, and constraints
+validium add NEW_VARIABLE
 ```
 
 Keep `.env.example` always in sync with a pre-commit hook:

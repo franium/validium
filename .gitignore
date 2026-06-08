@@ -1,0 +1,24 @@
+.pi
+envguard
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+go.work
+go.work.sum
+.env
+.env.age
+.env.age.tmp-*
+.validium.key
+.validium.key.tmp-*
+CLAUDE.md
+.codegraph
+.cursor
+# Local Pi runtime state
+.atl/

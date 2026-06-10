@@ -13,9 +13,29 @@ A CLI tool that validates `.env` files against a typed schema. It catches missin
 
 ![validium demo](assets/demo.gif)
 
+## Table of Contents
+
+- [Why validium?](#why-validium)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Commands](#commands)
+- [Workflow](#workflow)
+- [Sharing secrets safely](#sharing-secrets-safely)
+- [Schema: `validium.json`](#schema-validiumjson)
+- [Fallback: `.env.example`](#fallback-envexample)
+- [Development](#development)
+
 ## Why validium?
 
-`.env.example` tells you which keys should exist. validium tells you whether the values are actually valid — right type, right format, not accidentally empty — before your app boots or your CI pipeline deploys.
+`.env.example` only tells you which keys should exist — not whether the values in `.env` actually make sense. A `PORT` set to `abc`, a `DATABASE_URL` that isn't a URL, or a required `API_KEY` left empty all pass a plain existence check and still blow up at runtime.
+
+validium closes that gap with a typed schema (`validium.json`):
+
+- **Real validation, not just presence checks** — types, ranges, choices, and format rules (`url`, `email`, integer/float ranges, string enums, ...) catch bad values before your app boots or your CI pipeline deploys.
+- **Schemas grow with your project** — they're not write-once. Whenever you introduce a new variable, run `validium add VARIABLE_NAME` and walk through its type, required/secret flags, and constraints interactively; validium writes it straight into `validium.json` for you, no hand-editing JSON or regenerating from scratch.
+- **One source of truth** — generate `.env.example` directly from the schema with `validium generate`, so your example file and your validation rules never drift apart.
+- **A versioned contract for your environment** — `validium.json` holds no secrets, only types, descriptions, and constraints. Commit it like any other source file: your team reviews changes to your environment's contract in pull requests and tracks its evolution through git history, the same way you track code.
+- **Safer sharing** — encrypt `.env` for teammates with built-in `age` encryption (`keygen`/`encrypt`/`decrypt`), no external binary required.
 
 ## Quick Start
 
@@ -34,11 +54,7 @@ That's it. Keep reading to learn how to refine your schema, generate `.env.examp
 
 ## Installation
 
-```bash
-go install github.com/franium/validium/cmd/validium@latest
-```
-
-Or build from source:
+Already ran the one-liner from [Quick Start](#quick-start)? You're set. To build from source instead:
 
 ```bash
 git clone https://github.com/franium/validium
@@ -47,6 +63,7 @@ go build -o validium ./cmd/validium
 ```
 
 **Requirements:** Go 1.26+
+
 ## Commands
 
 | Command    | Description |
@@ -73,6 +90,10 @@ validium generate
 
 # 4. Validate .env in CI or on pre-commit
 validium check
+
+# 5. Need a new variable later? Register it interactively —
+#    validium walks you through its type, required/secret flags, and constraints
+validium add NEW_VARIABLE
 ```
 
 Keep `.env.example` always in sync with a pre-commit hook:
@@ -80,27 +101,6 @@ Keep `.env.example` always in sync with a pre-commit hook:
 ```bash
 validium generate && git add .env.example
 ```
-
-## CI Integration
-
-Add `validium check` to your pipeline to validate environment variables before deployment:
-
-```yaml
-# .github/workflows/ci.yml
-- name: Validate .env
-  run: |
-    go install github.com/franium/validium/cmd/validium@latest
-    validium check
-```
-
-`check` exits with code `1` on any validation failure, making it safe to use as a pipeline gate.
-
-### Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| `0`  | All variables are valid |
-| `1`  | One or more validation errors |
 
 ## Sharing secrets safely
 
@@ -232,6 +232,15 @@ If `validium.json` is not found, `check` falls back to `.env.example` and verifi
 Run `validium init` to graduate from `.env.example` to a full typed schema.
 
 ## Development
+
+### Running tests and checks
+
+```bash
+go vet ./...
+go test ./...
+```
+
+These are the same checks CI runs on every push.
 
 ### Regenerating the demo GIF
 

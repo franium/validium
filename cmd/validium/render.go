@@ -22,42 +22,46 @@ func terminalWidth() int {
 }
 
 var (
-	red   = lipgloss.Color("#FF5F5F")
-	green = lipgloss.Color("#5FFF87")
-	muted = lipgloss.Color("#626262")
-	white = lipgloss.Color("#FFFFFF")
+	red    = lipgloss.Color("#FF5F5F")
+	green  = lipgloss.Color("#5FFF87")
+	yellow = lipgloss.Color("#FFD75F")
+	muted  = lipgloss.Color("#626262")
+	white  = lipgloss.Color("#FFFFFF")
 
-	errorBox = lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(red).
-			PaddingTop(1).
-			PaddingBottom(1).
-			PaddingLeft(3).
-			PaddingRight(3)
+	baseBox = lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		PaddingTop(1).
+		PaddingBottom(1).
+		PaddingLeft(3).
+		PaddingRight(3)
 
-	successBox = lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(green).
-			PaddingTop(1).
-			PaddingBottom(1).
-			PaddingLeft(3).
-			PaddingRight(3)
+	errorBox   = baseBox.BorderForeground(red)
+	successBox = baseBox.BorderForeground(green)
+	warningBox = baseBox.BorderForeground(yellow)
 
 	titleErrorStyle   = lipgloss.NewStyle().Bold(true).Foreground(red)
 	titleSuccessStyle = lipgloss.NewStyle().Bold(true).Foreground(green)
+	titleWarningStyle = lipgloss.NewStyle().Bold(true).Foreground(yellow)
 	varNameStyle      = lipgloss.NewStyle().Bold(true).Foreground(white)
 	msgStyle          = lipgloss.NewStyle().Foreground(muted)
 	errorMark         = lipgloss.NewStyle().Foreground(red).Render("✗")
 	successMark       = lipgloss.NewStyle().Foreground(green).Render("✓")
+	warningMark       = lipgloss.NewStyle().Foreground(yellow).Render("!")
 )
 
-func renderValidationErrors(errors []validium.ValidiumValidationError) {
+// Column widths for the aligned name/message layout in the error box.
+const (
+	nameColumnWidth = 24
+	msgColumnWidth  = 30
+)
+
+func renderValidationErrors(errs []validium.ValidationError) {
 	var sb strings.Builder
 
 	sb.WriteString(titleErrorStyle.Render("Validation Failed"))
 	sb.WriteString("\n\n")
 
-	for _, e := range errors {
+	for _, e := range errs {
 		value := ""
 		if e.Secret {
 			value = msgStyle.Render("--> ••••••")
@@ -66,13 +70,13 @@ func renderValidationErrors(errors []validium.ValidiumValidationError) {
 		}
 		styledName := varNameStyle.Render(e.VariableName)
 		styledMsg := msgStyle.Render(e.Message)
-		namePad := strings.Repeat(" ", max(0, 24-lipgloss.Width(styledName)))
-		msgPad := strings.Repeat(" ", max(0, 30-lipgloss.Width(styledMsg)))
+		namePad := strings.Repeat(" ", max(0, nameColumnWidth-lipgloss.Width(styledName)))
+		msgPad := strings.Repeat(" ", max(0, msgColumnWidth-lipgloss.Width(styledMsg)))
 		sb.WriteString(fmt.Sprintf("  %s  %s%s %s%s %s\n",
 			errorMark, styledName, namePad, styledMsg, msgPad, value))
 	}
 
-	sb.WriteString(fmt.Sprintf("\n  %s", msgStyle.Render(fmt.Sprintf("%d error(s) found in .env", len(errors)))))
+	sb.WriteString(fmt.Sprintf("\n  %s", msgStyle.Render(fmt.Sprintf("%d error(s) found in %s", len(errs), envFilename))))
 
 	fmt.Println(errorBox.Width(terminalWidth()).Render(sb.String()))
 }
@@ -83,6 +87,6 @@ func renderSuccess(msg string) {
 }
 
 func renderWarning(msg string) {
-	content := fmt.Sprintf("%s  %s", errorMark, msg)
-	fmt.Println(errorBox.Width(terminalWidth()).Render(titleErrorStyle.Render("Warning") + "\n\n  " + content))
+	content := fmt.Sprintf("%s  %s", warningMark, msg)
+	fmt.Println(warningBox.Width(terminalWidth()).Render(titleWarningStyle.Render("Warning") + "\n\n  " + content))
 }

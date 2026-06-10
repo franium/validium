@@ -31,8 +31,8 @@ func ParseEnvFile(envFilename string) (map[string]string, error) {
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 1024), maxEnvLineSize)
 	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		if !strings.Contains(line, "=") {
@@ -40,21 +40,23 @@ func ParseEnvFile(envFilename string) (map[string]string, error) {
 		}
 		parts := strings.SplitN(line, "=", 2)
 		key := strings.TrimSpace(parts[0])
+		// dotenv files commonly prefix assignments with "export" for shell sourcing.
+		key = strings.TrimSpace(strings.TrimPrefix(key, "export "))
 		value := stripQuotes(strings.TrimSpace(parts[1]))
 		result[key] = value
 	}
 	return result, scanner.Err()
 }
 
-func IdentifyVariables(envFilename string) ([]ValidiumVariable, error) {
+func IdentifyVariables(envFilename string) ([]Variable, error) {
 	raw, err := ParseEnvFile(envFilename)
 	if err != nil {
 		return nil, err
 	}
 
-	results := make([]ValidiumVariable, 0, len(raw))
+	results := make([]Variable, 0, len(raw))
 	for key, value := range raw {
-		results = append(results, ValidiumVariable{Name: key, Type: inferType(value)})
+		results = append(results, Variable{Name: key, Type: inferType(value)})
 	}
 	return results, nil
 }

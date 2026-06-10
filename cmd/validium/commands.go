@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"slices"
 	"strconv"
@@ -20,61 +21,57 @@ func fileExists(filename string) bool {
 	return err == nil
 }
 
-func loadValidiumData() (validium.ValidiumData, error) {
-	var data validium.ValidiumData
+func loadSchema() (validium.Schema, error) {
+	var data validium.Schema
 	file, err := os.Open(mainFilename)
 	if err != nil {
-		return data, fmt.Errorf("error opening %s: %w", mainFilename, err)
+		return data, fmt.Errorf("opening %s: %w", mainFilename, err)
 	}
 	defer file.Close()
 	if err := json.NewDecoder(file).Decode(&data); err != nil {
-		return data, fmt.Errorf("error decoding JSON from %s: %w", mainFilename, err)
+		return data, fmt.Errorf("decoding JSON from %s: %w", mainFilename, err)
 	}
 	return data, nil
 }
 
-func loadVariables() ([]validium.ValidiumVariable, error) {
+func loadVariables() ([]validium.Variable, error) {
 	return validium.IdentifyVariables(envFilename)
 }
 
-func initialize(variables []validium.ValidiumVariable) error {
+func initialize(variables []validium.Variable) error {
 	// Defensive check: main.go also guards this, but Init may be called directly in tests or future callers.
 	if !fileExists(envFilename) {
-		return fmt.Errorf("%s does not exist. Please create this file before initializing.", envFilename)
+		return fmt.Errorf("%s does not exist; create it before initializing", envFilename)
 	}
 	if fileExists(mainFilename) {
-		return fmt.Errorf("%s already exists. Initialization has already been done. Use 'generate'.", mainFilename)
+		return fmt.Errorf("%s already exists, initialization has already been done; use 'generate' instead", mainFilename)
 	}
 	return writeSchema(variables)
 }
 
 func checkEnvExample() error {
 	if !fileExists(envExampleFilename) {
-		return fmt.Errorf("%s does not exist. Please create this file before checking.", envExampleFilename)
+		return fmt.Errorf("%s does not exist; create it before checking", envExampleFilename)
 	}
 
 	exampleVars, err := validium.ParseEnvFile(envExampleFilename)
 	if err != nil {
-		return fmt.Errorf("error reading %s: %w", envExampleFilename, err)
+		return fmt.Errorf("reading %s: %w", envExampleFilename, err)
 	}
 
 	envVars, err := validium.ParseEnvFile(envFilename)
 	if err != nil {
-		return fmt.Errorf("error reading %s: %w", envFilename, err)
+		return fmt.Errorf("reading %s: %w", envFilename, err)
 	}
 
-	exampleKeys := make([]string, 0, len(exampleVars))
-	for name := range exampleVars {
-		exampleKeys = append(exampleKeys, name)
-	}
-	slices.Sort(exampleKeys)
+	exampleKeys := slices.Sorted(maps.Keys(exampleVars))
 
-	var errs []validium.ValidiumValidationError
+	var errs []validium.ValidationError
 	for _, name := range exampleKeys {
 		if _, found := envVars[name]; !found {
-			errs = append(errs, validium.ValidiumValidationError{
+			errs = append(errs, validium.ValidationError{
 				VariableName: name,
-				Message:      "variable defined in .env.example is missing in .env file",
+				Message:      fmt.Sprintf("variable defined in %s is missing in %s", envExampleFilename, envFilename),
 			})
 		}
 	}
@@ -92,27 +89,27 @@ using the 'init' command.`)
 }
 
 func checkValidium() error {
-	data, err := loadValidiumData()
+	data, err := loadSchema()
 	if err != nil {
 		return err
 	}
 
-	validiumVars, err := validium.ParseValidiumData(data)
+	validiumVars, err := validium.ParseSchema(data)
 	if err != nil {
-		return fmt.Errorf("error parsing Validium data: %w", err)
+		return fmt.Errorf("parsing %s: %w", mainFilename, err)
 	}
 
 	envVars, err := validium.ParseEnvFile(envFilename)
 	if err != nil {
-		return fmt.Errorf("error parsing %s: %w", envFilename, err)
+		return fmt.Errorf("parsing %s: %w", envFilename, err)
 	}
 
-	var errs []validium.ValidiumValidationError
+	var errs []validium.ValidationError
 	for _, validiumVar := range validiumVars {
 		val, found := envVars[validiumVar.Name]
 		if !found {
 			if validiumVar.Required {
-				errs = append(errs, validium.ValidiumValidationError{
+				errs = append(errs, validium.ValidationError{
 					VariableName: validiumVar.Name,
 					Message:      "variable not found in .env file",
 				})
@@ -120,7 +117,11 @@ func checkValidium() error {
 			continue
 		}
 		if err := validiumVar.Validate(val); err != nil {
-			errs = append(errs, *err)
+			var verr validium.ValidationError
+			if !errors.As(err, &verr) {
+				verr = validium.ValidationError{VariableName: validiumVar.Name, Message: err.Error()}
+			}
+			errs = append(errs, verr)
 		}
 	}
 
@@ -145,7 +146,7 @@ func check() error {
 	case envExampleExists:
 		return checkEnvExample()
 	default:
-		return fmt.Errorf("neither %s nor %s exists. Please create one of these files", mainFilename, envExampleFilename)
+		return fmt.Errorf("neither %s nor %s exists; create one of them", mainFilename, envExampleFilename)
 	}
 }
 
@@ -156,7 +157,7 @@ func encrypt(recipientKeys []string) error {
 
 	input, err := os.Open(envFilename)
 	if err != nil {
-		return fmt.Errorf("error opening %s: %w", envFilename, err)
+		return fmt.Errorf("opening %s: %w", envFilename, err)
 	}
 	defer input.Close()
 
@@ -175,7 +176,7 @@ func encrypt(recipientKeys []string) error {
 
 	output, err := os.CreateTemp(".", envAgeFilename+".tmp-*")
 	if err != nil {
-		return fmt.Errorf("error creating temporary encrypted file: %w", err)
+		return fmt.Errorf("creating temporary encrypted file: %w", err)
 	}
 	tmpName := output.Name()
 	defer os.Remove(tmpName)
@@ -183,23 +184,23 @@ func encrypt(recipientKeys []string) error {
 	encryptedWriter, err := age.Encrypt(output, recipients...)
 	if err != nil {
 		_ = output.Close()
-		return fmt.Errorf("error initializing encryption: %w", err)
+		return fmt.Errorf("initializing encryption: %w", err)
 	}
 
 	if _, err := io.Copy(encryptedWriter, input); err != nil {
 		_ = encryptedWriter.Close()
 		_ = output.Close()
-		return fmt.Errorf("error encrypting %s: %w", envFilename, err)
+		return fmt.Errorf("encrypting %s: %w", envFilename, err)
 	}
 	if err := encryptedWriter.Close(); err != nil {
 		_ = output.Close()
-		return fmt.Errorf("error finalizing encryption: %w", err)
+		return fmt.Errorf("finalizing encryption: %w", err)
 	}
 	if err := output.Close(); err != nil {
-		return fmt.Errorf("error closing temporary encrypted file: %w", err)
+		return fmt.Errorf("closing temporary encrypted file: %w", err)
 	}
 	if err := os.Rename(tmpName, envAgeFilename); err != nil {
-		return fmt.Errorf("error replacing %s: %w", envAgeFilename, err)
+		return fmt.Errorf("replacing %s: %w", envAgeFilename, err)
 	}
 
 	fmt.Printf("%s has been encrypted to %s.\n", envFilename, envAgeFilename)
@@ -208,17 +209,17 @@ func encrypt(recipientKeys []string) error {
 
 func keygen() error {
 	if fileExists(ageIdentityFilename) {
-		return fmt.Errorf("%s already exists. Refusing to overwrite an existing private key", ageIdentityFilename)
+		return fmt.Errorf("%s already exists; refusing to overwrite an existing private key", ageIdentityFilename)
 	}
 
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
-		return fmt.Errorf("error generating age identity: %w", err)
+		return fmt.Errorf("generating age identity: %w", err)
 	}
 
 	file, err := os.CreateTemp(".", ageIdentityFilename+".tmp-*")
 	if err != nil {
-		return fmt.Errorf("error creating temporary identity file: %w", err)
+		return fmt.Errorf("creating temporary identity file: %w", err)
 	}
 	tmpName := file.Name()
 	defer os.Remove(tmpName)
@@ -226,16 +227,16 @@ func keygen() error {
 	content := fmt.Sprintf("# public key: %s\n%s\n", identity.Recipient(), identity)
 	if _, err := file.WriteString(content); err != nil {
 		_ = file.Close()
-		return fmt.Errorf("error writing temporary identity file: %w", err)
+		return fmt.Errorf("writing temporary identity file: %w", err)
 	}
 	if err := file.Close(); err != nil {
-		return fmt.Errorf("error closing temporary identity file: %w", err)
+		return fmt.Errorf("closing temporary identity file: %w", err)
 	}
 	if err := os.Link(tmpName, ageIdentityFilename); err != nil {
 		if os.IsExist(err) {
-			return fmt.Errorf("%s already exists. Refusing to overwrite an existing private key", ageIdentityFilename)
+			return fmt.Errorf("%s already exists; refusing to overwrite an existing private key", ageIdentityFilename)
 		}
-		return fmt.Errorf("error creating %s: %w", ageIdentityFilename, err)
+		return fmt.Errorf("creating %s: %w", ageIdentityFilename, err)
 	}
 
 	fmt.Printf("Identity written to %s.\nPublic key: %s\n", ageIdentityFilename, identity.Recipient())
@@ -248,7 +249,7 @@ func decrypt(identityFilename string) error {
 		return fmt.Errorf("age identity file cannot be empty")
 	}
 	if fileExists(envFilename) {
-		return fmt.Errorf("%s already exists. Refusing to overwrite it", envFilename)
+		return fmt.Errorf("%s already exists; refusing to overwrite it", envFilename)
 	}
 
 	identities, err := loadAgeIdentities(identityFilename)
@@ -258,27 +259,27 @@ func decrypt(identityFilename string) error {
 
 	input, err := os.Open(envAgeFilename)
 	if err != nil {
-		return fmt.Errorf("error opening %s: %w", envAgeFilename, err)
+		return fmt.Errorf("opening %s: %w", envAgeFilename, err)
 	}
 	defer input.Close()
 
 	decryptedReader, err := age.Decrypt(input, identities...)
 	if err != nil {
-		return fmt.Errorf("error initializing decryption: %w", err)
+		return fmt.Errorf("initializing decryption: %w", err)
 	}
 
 	output, err := os.OpenFile(envFilename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
-		return fmt.Errorf("error creating %s: %w", envFilename, err)
+		return fmt.Errorf("creating %s: %w", envFilename, err)
 	}
 
 	if _, err := io.Copy(output, decryptedReader); err != nil {
 		_ = output.Close()
 		_ = os.Remove(envFilename)
-		return fmt.Errorf("error decrypting %s: %w", envAgeFilename, err)
+		return fmt.Errorf("decrypting %s: %w", envAgeFilename, err)
 	}
 	if err := output.Close(); err != nil {
-		return fmt.Errorf("error closing %s: %w", envFilename, err)
+		return fmt.Errorf("closing %s: %w", envFilename, err)
 	}
 
 	fmt.Printf("%s has been decrypted to %s.\n", envAgeFilename, envFilename)
@@ -288,7 +289,7 @@ func decrypt(identityFilename string) error {
 func loadAgeIdentities(identityFilename string) ([]age.Identity, error) {
 	content, err := os.ReadFile(identityFilename)
 	if err != nil {
-		return nil, fmt.Errorf("error reading %s: %w", identityFilename, err)
+		return nil, fmt.Errorf("reading %s: %w", identityFilename, err)
 	}
 
 	var identities []age.Identity
@@ -311,18 +312,24 @@ func loadAgeIdentities(identityFilename string) ([]age.Identity, error) {
 	return identities, nil
 }
 
-func writeSchema(variables []validium.ValidiumVariable) error {
+// saveSchema marshals data and persists it to validium.json.
+func saveSchema(data validium.Schema) error {
+	dataJSON, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling JSON: %w", err)
+	}
+	if err := os.WriteFile(mainFilename, dataJSON, 0644); err != nil {
+		return fmt.Errorf("writing %s: %w", mainFilename, err)
+	}
+	return nil
+}
+
+func writeSchema(variables []validium.Variable) error {
 	if len(variables) == 0 {
 		return fmt.Errorf("no variables found in %s", envFilename)
 	}
-
-	data := validium.FormatValidiumData(variables)
-	dataJSON, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("error marshaling JSON: %w", err)
-	}
-	if err := os.WriteFile(mainFilename, dataJSON, 0644); err != nil {
-		return fmt.Errorf("error writing %s: %w", mainFilename, err)
+	if err := saveSchema(validium.NewSchema(variables)); err != nil {
+		return err
 	}
 
 	fmt.Printf("%s has been generated successfully.\n", mainFilename)
@@ -331,33 +338,32 @@ func writeSchema(variables []validium.ValidiumVariable) error {
 
 func generate() error {
 	if !fileExists(mainFilename) {
-		return fmt.Errorf("%s not found. Run 'init' first to generate it from your .env", mainFilename)
+		return fmt.Errorf("%s not found; run 'init' first to generate it from your .env", mainFilename)
 	}
 
-	data, err := loadValidiumData()
+	data, err := loadSchema()
 	if err != nil {
 		return err
 	}
 
-	keys := make([]string, 0, len(data.Variables))
-	for name := range data.Variables {
-		keys = append(keys, name)
+	// ParseSchema validates every declared type and returns variables sorted by name.
+	variables, err := validium.ParseSchema(data)
+	if err != nil {
+		return fmt.Errorf("parsing %s: %w", mainFilename, err)
 	}
-	slices.Sort(keys)
 
 	var sb strings.Builder
 	sb.WriteString("# Generated by validium — do not add real values here\n")
-	for _, name := range keys {
-		v := data.Variables[name]
+	for _, v := range variables {
 		if v.Description != "" {
 			sb.WriteString("# " + v.Description + "\n")
 		}
-		sb.WriteString(name + "=" + formatDefaultValue(v.Default) + "\n")
+		sb.WriteString(v.Name + "=" + formatDefaultValue(v.Default) + "\n")
 	}
 
 	existed := fileExists(envExampleFilename)
 	if err := os.WriteFile(envExampleFilename, []byte(sb.String()), 0644); err != nil {
-		return fmt.Errorf("error writing %s: %w", envExampleFilename, err)
+		return fmt.Errorf("writing %s: %w", envExampleFilename, err)
 	}
 
 	if existed {
@@ -382,26 +388,23 @@ func formatDefaultValue(d any) string {
 func help() {
 	fmt.Println("Usage: validium [command]")
 	fmt.Println("Commands:")
-	fmt.Println("  init      - Initialize validium.json from your existing .env file.")
-	fmt.Println("  check     - Validate .env against validium.json or .env.example.")
-	fmt.Println("  generate  - Generate .env.example from validium.json.")
-	fmt.Println("  add       - Add a new variable to validium.json interactively.")
-	fmt.Println("  encrypt   - Encrypt .env to .env.age for one or more age recipients.")
-	fmt.Println("  decrypt   - Decrypt .env.age to .env using an age identity file.")
-	fmt.Println("  keygen    - Generate a local age identity and print its public key.")
-	fmt.Println("  help      - Display this help message.")
+	for _, c := range commandList {
+		fmt.Printf("  %-10s- %s\n", c.name, c.description)
+	}
+	fmt.Println("Flags:")
+	fmt.Printf("  %-10s- Print the validium version (alias -v).\n", "--version")
 }
 
 func add(variableName string) error {
-	variableName = strings.ToUpper(variableName)
-
-	if !fileExists(mainFilename) {
-		return fmt.Errorf("%s not found. Run 'init' first to generate it from your .env", mainFilename)
-	}
 	if strings.TrimSpace(variableName) == "" {
 		return fmt.Errorf("variable name cannot be empty")
 	}
-	data, err := loadValidiumData()
+	variableName = strings.ToUpper(variableName)
+
+	if !fileExists(mainFilename) {
+		return fmt.Errorf("%s not found; run 'init' first to generate it from your .env", mainFilename)
+	}
+	data, err := loadSchema()
 	if err != nil {
 		return err
 	}
@@ -417,7 +420,7 @@ func add(variableName string) error {
 			fmt.Println("Cancelled.")
 			return nil
 		}
-		return fmt.Errorf("error collecting variable options: %w", err)
+		return fmt.Errorf("collecting variable options: %w", err)
 	}
 
 	if err := writeVariable(data, variableName, variable); err != nil {
@@ -433,37 +436,39 @@ func add(variableName string) error {
 // writeVariable inserts variable into data under variableName and persists the
 // schema. Kept separate from add's interactive form so the persistence path is
 // testable without a TTY.
-func writeVariable(data validium.ValidiumData, variableName string, variable validium.ValidiumVariable) error {
+func writeVariable(data validium.Schema, variableName string, variable validium.Variable) error {
 	data.Variables[variableName] = variable
+	return saveSchema(data)
+}
 
-	dataJSON, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Errorf("error marshaling JSON: %w", err)
-	}
-	if err := os.WriteFile(mainFilename, dataJSON, 0644); err != nil {
-		return fmt.Errorf("error writing to %s: %w", mainFilename, err)
+// runForm runs a huh form, passing huh.ErrUserAborted through untouched so
+// callers can detect a clean cancel with errors.Is.
+func runForm(form *huh.Form) error {
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return err
+		}
+		return fmt.Errorf("running form: %w", err)
 	}
 	return nil
 }
 
-func addVariableForm(variableName string) (validium.ValidiumVariable, error) {
+func addVariableForm(variableName string) (validium.Variable, error) {
 	var selectedType string
 	var required bool
 	var secret bool
+
+	typeOptions := make([]huh.Option[string], 0, len(validium.TypeOptions))
+	for _, opt := range validium.TypeOptions {
+		typeOptions = append(typeOptions, huh.NewOption(opt.Label, opt.Value))
+	}
 
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Select the type of your new variable").
-				Options(
-					huh.NewOption("String", "string"),
-					huh.NewOption("Number", "integer"),
-					huh.NewOption("Float", "float"),
-					huh.NewOption("Boolean", "boolean"),
-					huh.NewOption("Url", "url"),
-					huh.NewOption("HTTP Url", "url-http"),
-					huh.NewOption("Email", "email"),
-				).Value(&selectedType),
+				Options(typeOptions...).
+				Value(&selectedType),
 			huh.NewConfirm().
 				Title("Is this variable required?").
 				Value(&required),
@@ -472,14 +477,11 @@ func addVariableForm(variableName string) (validium.ValidiumVariable, error) {
 				Value(&secret),
 		),
 	)
-	if err := form.Run(); err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			return validium.ValidiumVariable{}, huh.ErrUserAborted
-		}
-		return validium.ValidiumVariable{}, fmt.Errorf("error running form: %w", err)
+	if err := runForm(form); err != nil {
+		return validium.Variable{}, err
 	}
 
-	variable := validium.ValidiumVariable{
+	variable := validium.Variable{
 		Name:     variableName,
 		Type:     selectedType,
 		Required: required,
@@ -498,15 +500,12 @@ func addVariableForm(variableName string) (validium.ValidiumVariable, error) {
 					Value(&maxStr),
 			),
 		)
-		if err := numForm.Run(); err != nil {
-			if errors.Is(err, huh.ErrUserAborted) {
-				return validium.ValidiumVariable{}, huh.ErrUserAborted
-			}
-			return validium.ValidiumVariable{}, fmt.Errorf("error running form: %w", err)
+		if err := runForm(numForm); err != nil {
+			return validium.Variable{}, err
 		}
 		conds, err := buildNumericConditions(minStr, maxStr)
 		if err != nil {
-			return validium.ValidiumVariable{}, err
+			return validium.Variable{}, err
 		}
 		variable.Conditions = conds
 	}
@@ -521,11 +520,8 @@ func addVariableForm(variableName string) (validium.ValidiumVariable, error) {
 					Value(&hasChoices),
 			),
 		)
-		if err := choicesConfirmForm.Run(); err != nil {
-			if errors.Is(err, huh.ErrUserAborted) {
-				return validium.ValidiumVariable{}, huh.ErrUserAborted
-			}
-			return validium.ValidiumVariable{}, fmt.Errorf("error running form: %w", err)
+		if err := runForm(choicesConfirmForm); err != nil {
+			return validium.Variable{}, err
 		}
 		if hasChoices {
 			choicesInputForm := huh.NewForm(
@@ -533,21 +529,16 @@ func addVariableForm(variableName string) (validium.ValidiumVariable, error) {
 					huh.NewInput().
 						Title("Allowed choices, separated by commas").
 						Value(&choicesStr).
-						Validate(func(value string) error {
-							return validateChoicesInput(value)
-						}),
+						Validate(validateChoicesInput),
 				),
 			)
-			if err := choicesInputForm.Run(); err != nil {
-				if errors.Is(err, huh.ErrUserAborted) {
-					return validium.ValidiumVariable{}, huh.ErrUserAborted
-				}
-				return validium.ValidiumVariable{}, fmt.Errorf("error running form: %w", err)
+			if err := runForm(choicesInputForm); err != nil {
+				return validium.Variable{}, err
 			}
 		}
 		conds, err := buildStringConditions(hasChoices, choicesStr)
 		if err != nil {
-			return validium.ValidiumVariable{}, err
+			return validium.Variable{}, err
 		}
 		variable.Conditions = conds
 	}

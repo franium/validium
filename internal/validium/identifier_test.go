@@ -38,8 +38,20 @@ func TestParseEnvFile(t *testing.T) {
 			want:    map[string]string{"FOO": "bar"},
 		},
 		{
+			// Regression: the "#" check must run on the trimmed line, or an
+			// indented comment containing "=" gets parsed as a variable.
+			name:    "indented comment with = ignored",
+			content: "  # FOO=bar\nREAL=value\n",
+			want:    map[string]string{"REAL": "value"},
+		},
+		{
 			name:    "lines without = ignored",
 			content: "NOTAKEY\nFOO=bar\n",
+			want:    map[string]string{"FOO": "bar"},
+		},
+		{
+			name:    "export prefix stripped",
+			content: "export FOO=bar\n",
 			want:    map[string]string{"FOO": "bar"},
 		},
 		{

@@ -12,27 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func cdTemp(t *testing.T) {
-	t.Helper()
-	dir := t.TempDir()
-	orig, err := os.Getwd()
-	require.NoError(t, err)
-	require.NoError(t, os.Chdir(dir))
-	t.Cleanup(func() { os.Chdir(orig) })
-}
-
 func writeFile(t *testing.T, name, content string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(name, []byte(content), 0644))
 }
 
 func TestInit_CreatesValidiumJSON(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "PORT=8080\nDEBUG=true\n")
-
-	if err := os.Remove(mainFilename); err != nil && !os.IsNotExist(err) {
-		require.NoError(t, err)
-	}
 
 	vars, err := loadVariables()
 	require.NoError(t, err)
@@ -42,7 +29,7 @@ func TestInit_CreatesValidiumJSON(t *testing.T) {
 }
 
 func TestInit_FailsWhenSchemaAlreadyExists(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "PORT=8080\n")
 	writeFile(t, mainFilename, `{"version":"0.1.0","variables":{}}`)
 
@@ -51,7 +38,7 @@ func TestInit_FailsWhenSchemaAlreadyExists(t *testing.T) {
 }
 
 func TestCheck_ValidEnvPassesAgainstSchema(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "PORT=8080\nDEBUG=true\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -65,7 +52,7 @@ func TestCheck_ValidEnvPassesAgainstSchema(t *testing.T) {
 }
 
 func TestCheck_MissingRequiredVarFails(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "DEBUG=true\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -79,7 +66,7 @@ func TestCheck_MissingRequiredVarFails(t *testing.T) {
 }
 
 func TestCheck_WrongTypeFails(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "PORT=notanumber\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -92,7 +79,7 @@ func TestCheck_WrongTypeFails(t *testing.T) {
 }
 
 func TestCheck_FallbackToEnvExample(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "FOO=bar\nBAZ=qux\n")
 	writeFile(t, ".env.example", "FOO=\nBAZ=\n")
 
@@ -100,7 +87,7 @@ func TestCheck_FallbackToEnvExample(t *testing.T) {
 }
 
 func TestCheck_FallbackMissingKeyFails(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "FOO=bar\n")
 	writeFile(t, ".env.example", "FOO=\nMISSING=\n")
 
@@ -108,7 +95,7 @@ func TestCheck_FallbackMissingKeyFails(t *testing.T) {
 }
 
 func TestCheck_OptionalVarAbsentFromEnvPasses(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "PORT=8080\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -122,14 +109,14 @@ func TestCheck_OptionalVarAbsentFromEnvPasses(t *testing.T) {
 }
 
 func TestCheck_NoSpecFileFails(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "FOO=bar\n")
 
 	assert.Error(t, check(), "check() should fail when neither validium.json nor .env.example exists")
 }
 
 func TestEncrypt_CreatesDecryptableEnvAge(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "SECRET=value\nPORT=8080\n")
 
 	identity, err := age.GenerateX25519Identity()
@@ -150,14 +137,14 @@ func TestEncrypt_CreatesDecryptableEnvAge(t *testing.T) {
 }
 
 func TestEncrypt_InvalidRecipientFails(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "SECRET=value\n")
 
 	assert.Error(t, encrypt([]string{"not-an-age-recipient"}), "encrypt() should fail with an invalid recipient")
 }
 
 func TestEncrypt_PreservesExistingEnvAgeWhenEncryptionFails(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	require.NoError(t, os.Mkdir(envFilename, 0755))
 	writeFile(t, envAgeFilename, "previous ciphertext")
 
@@ -172,7 +159,7 @@ func TestEncrypt_PreservesExistingEnvAgeWhenEncryptionFails(t *testing.T) {
 }
 
 func TestKeygen_CreatesParseableIdentityFile(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 
 	require.NoError(t, keygen())
 
@@ -186,14 +173,14 @@ func TestKeygen_CreatesParseableIdentityFile(t *testing.T) {
 }
 
 func TestKeygen_RefusesToOverwriteIdentityFile(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ageIdentityFilename, "existing\n")
 
 	assert.Error(t, keygen(), "keygen() should fail when the identity file already exists")
 }
 
 func TestDecrypt_CreatesEnvFromEnvAge(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 
 	identity, err := age.GenerateX25519Identity()
 	require.NoError(t, err)
@@ -208,7 +195,7 @@ func TestDecrypt_CreatesEnvFromEnvAge(t *testing.T) {
 }
 
 func TestDecrypt_RefusesToOverwriteEnv(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 
 	identity, err := age.GenerateX25519Identity()
 	require.NoError(t, err)
@@ -240,7 +227,7 @@ func writeEncryptedEnvAge(t *testing.T, plaintext string, recipient age.Recipien
 }
 
 func TestCheck_HttpsConditionEnforced(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "API_URL=http://example.com\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -253,7 +240,7 @@ func TestCheck_HttpsConditionEnforced(t *testing.T) {
 }
 
 func TestCheck_HttpsConditionPermissive(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "API_URL=http://example.com\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -266,7 +253,7 @@ func TestCheck_HttpsConditionPermissive(t *testing.T) {
 }
 
 func TestCheck_BothFilesPresent_UsesValidium(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	// .env.example lists EXTRA but validium.json does not — validium.json must win
 	writeFile(t, ".env", "PORT=8080\n")
 	writeFile(t, ".env.example", "PORT=\nEXTRA=\n")
@@ -281,14 +268,14 @@ func TestCheck_BothFilesPresent_UsesValidium(t *testing.T) {
 }
 
 func TestGenerate_FailsWhenSchemaIsMissing(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "PORT=8080\n")
 
 	assert.Error(t, generate(), "generate() should fail when validium.json does not exist")
 }
 
 func TestGenerate_CreatesEnvExample(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
 		"variables": {
@@ -309,7 +296,7 @@ func TestGenerate_CreatesEnvExample(t *testing.T) {
 }
 
 func TestGenerate_EmitsDefaultValues(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
 		"variables": {
@@ -332,7 +319,7 @@ func TestGenerate_EmitsDefaultValues(t *testing.T) {
 }
 
 func TestGenerate_NoDefaultEmitsEmptyPlaceholder(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
 		"variables": {
@@ -348,7 +335,7 @@ func TestGenerate_NoDefaultEmitsEmptyPlaceholder(t *testing.T) {
 }
 
 func TestGenerate_OverwritesExisting(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, envExampleFilename, "OLD_KEY=stale\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -367,27 +354,27 @@ func TestGenerate_OverwritesExisting(t *testing.T) {
 }
 
 func TestAdd_FailsWhenSchemaMissing(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 
 	assert.Error(t, add("FOO"), "add() should fail when validium.json does not exist")
 }
 
 func TestAdd_FailsWhenNameEmpty(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, mainFilename, `{"version":"0.1.0","variables":{}}`)
 
 	assert.Error(t, add("   "), "add() should fail when variable name is blank")
 }
 
 func TestAdd_ExistingVariableMakesNoChange(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	original := `{"version":"0.1.0","variables":{"PORT":{"type":"integer","secret":false,"required":true}}}`
 	writeFile(t, mainFilename, original)
 
 	// PORT already exists, so add returns before reaching the interactive form.
 	assert.NoError(t, add("PORT"), "add() of an existing variable should not error")
 
-	data, err := loadValidiumData()
+	data, err := loadSchema()
 	require.NoError(t, err)
 	assert.Len(t, data.Variables, 1, "expected schema unchanged with 1 variable")
 }
@@ -462,7 +449,7 @@ func TestBuildStringConditions(t *testing.T) {
 }
 
 func TestCheck_IntegerMinConditionEnforced(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "PORT=0\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -475,7 +462,7 @@ func TestCheck_IntegerMinConditionEnforced(t *testing.T) {
 }
 
 func TestCheck_IntegerMaxConditionEnforced(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "PORT=99999\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -488,7 +475,7 @@ func TestCheck_IntegerMaxConditionEnforced(t *testing.T) {
 }
 
 func TestCheck_IntegerWithinRangePasses(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "PORT=8080\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -501,7 +488,7 @@ func TestCheck_IntegerWithinRangePasses(t *testing.T) {
 }
 
 func TestCheck_FloatRangeEnforced(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, ".env", "RATIO=1.5\n")
 	writeFile(t, mainFilename, `{
 		"version": "0.1.0",
@@ -514,16 +501,16 @@ func TestCheck_FloatRangeEnforced(t *testing.T) {
 }
 
 func TestWriteVariable_PersistsNewVariable(t *testing.T) {
-	cdTemp(t)
+	t.Chdir(t.TempDir())
 	writeFile(t, mainFilename, `{"version":"0.1.0","variables":{"PORT":{"type":"integer","required":true}}}`)
 
-	data, err := loadValidiumData()
+	data, err := loadSchema()
 	require.NoError(t, err)
 
-	newVar := validium.ValidiumVariable{Name: "API_KEY", Type: "string", Required: true, Secret: true}
+	newVar := validium.Variable{Name: "API_KEY", Type: "string", Required: true, Secret: true}
 	require.NoError(t, writeVariable(data, "API_KEY", newVar))
 
-	reloaded, err := loadValidiumData()
+	reloaded, err := loadSchema()
 	require.NoError(t, err)
 
 	got, ok := reloaded.Variables["API_KEY"]
